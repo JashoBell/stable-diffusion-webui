@@ -3,7 +3,8 @@ __pycache__
 /repositories
 /venv
 /tmp
-/models/*
+/model.ckpt
+/models/*.ckpt
 /GFPGANv1.3.pth
 /ui-config.json
 /outputs
