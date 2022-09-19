@@ -5,7 +5,7 @@ from modules import images
 from modules.processing import process_images, Processed
 from modules.processing import Processed
 from modules.shared import opts, cmd_opts, state
-from PIL import Image
+from PIL import Image, ImageOps
 
 
 class Script(scripts.Script):
@@ -21,23 +21,28 @@ class Script(scripts.Script):
                           label="Angle")
         hflip = gr.Checkbox(False, label="Horizontal flip")
         vflip = gr.Checkbox(False, label="Vertical flip")
+        fill = gr.Checkbox(False, label="Fill")
+        trim = gr.Slider(minimum=0.0, maximum=100.0, step=0.1, value=0)
         overwrite = gr.Checkbox(False, label="Overwrite existing files")
 
 
-        return [angle, hflip, vflip, overwrite]
+        return [angle, hflip, vflip, fill, trim, overwrite]
 
 
-    def run(self, p, angle, hflip, vflip, overwrite):
+    def run(self, p, angle, hflip, vflip, fill, trim, overwrite):
         print("Rotating output")
         # function which takes an image, an angle and two booleans indicating horizontal and vertical flips, then returns the image rotated and flipped accordingly
-        def rotate_and_flip(im, angle, hflip, vflip):
+        def rotate_and_resize(im, angle, hflip, vflip, fill, trim):
             raf = im
             if angle != 0:
-                raf = raf.rotate(angle, expand=False, resample = Image.BICUBIC, fillcolor = (255, 255, 255))
+                raf = raf.rotate(angle, expand=fill, resample = Image.BICUBIC, fillcolor = (255, 255, 255))
             if hflip:
                 raf = raf.transpose(Image.FLIP_LEFT_RIGHT)
             if vflip:
                 raf = raf.transpose(Image.FLIP_TOP_BOTTOM)
+            if trim:
+                trim = (trim/100)*raf.height if raf.height == raf.width else (trim/100)*raf.width if raf.width < raf.height else (trim/100)*raf.height
+                raf = ImageOps.crop(raf, trim)
             return raf
             
         basename = ""
@@ -52,14 +57,17 @@ class Script(scripts.Script):
             else:
                 p.do_not_save_samples = True
 
-        proc = process_images(p)
-        
+        state.job_count = p.n_iter
+        p.n_iter = 1
+        images = []
         # rotate and flip each image in the processed images
-        for i in range(len(proc.images)):
+        for i in range(state.job_count):
+            proc = process_images(p)
+            for i in proc.images:
+                proc.images[i] = rotate_and_resize(proc.images[i], angle, hflip, vflip, fill, trim)
+                images.save_image(proc.images[i], p.outpath_samples, basename,
+                proc.seed + i, proc.prompt, opts.samples_format, info= proc.info, p=p)
+                images.append(proc.images[i])
 
-            proc.images[i] = rotate_and_flip(proc.images[i], angle, hflip, vflip)
-
-            images.save_image(proc.images[i], p.outpath_samples, basename,
-            proc.seed + i, proc.prompt, opts.samples_format, info= proc.info, p=p)
-            
-        return proc
+                    
+        return Processed(p, images, p.seed, "")
