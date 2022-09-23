@@ -22,7 +22,6 @@ from modules.paths import script_path
 from modules.shared import opts, cmd_opts
 import modules.shared as shared
 from modules.sd_samplers import samplers, samplers_for_img2img
-import modules.realesrgan_model as realesrgan
 import modules.ldsr_model
 import modules.scripts
 import modules.gfpgan_model
@@ -201,7 +200,7 @@ def check_progress_call():
         else:
             preview_visibility = gr_show(True)
 
-    return f"<span style='display: none'>{time.time()}</span><p>{progressbar}</p>", preview_visibility, image
+    return f"<span id='progressSpan' style='display: none'>{time.time()}</span><p>{progressbar}</p>", preview_visibility, image
 
 
 def check_progress_call_initial():
@@ -753,6 +752,8 @@ def create_ui(txt2img, img2img, run_extras, run_pnginfo):
                 result_images = gr.Gallery(label="Result", show_label=False)
                 html_info_x = gr.HTML()
                 html_info = gr.HTML()
+                extras_send_to_img2img = gr.Button('Send to img2img')
+                extras_send_to_inpaint = gr.Button('Send to inpaint')
 
         submit.click(
             fn=run_extras,
@@ -774,6 +775,20 @@ def create_ui(txt2img, img2img, run_extras, run_pnginfo):
                 html_info_x,
                 html_info,
             ]
+        )
+     
+        extras_send_to_img2img.click(
+            fn=lambda x: image_from_url_text(x),
+            _js="extract_image_from_gallery_img2img",
+            inputs=[result_images],
+            outputs=[init_img],
+        )
+        
+        extras_send_to_inpaint.click(
+            fn=lambda x: image_from_url_text(x),
+            _js="extract_image_from_gallery_img2img",
+            inputs=[result_images],
+            outputs=[init_img_with_mask],
         )
 
     pnginfo_interface = gr.Interface(
@@ -814,12 +829,13 @@ def create_ui(txt2img, img2img, run_extras, run_pnginfo):
         return comp(label=info.label, value=fun, **(args or {}))
 
     components = []
-    keys = list(opts.data_labels.keys())
-    settings_cols = 3
-    items_per_col = math.ceil(len(keys) / settings_cols)
 
     def run_settings(*args):
-        up = []
+        changed = 0
+
+        for key, value, comp in zip(opts.data_labels.keys(), args, components):
+            if not opts.same_type(value, opts.data_labels[key].default):
+                return f"Bad value for setting {key}: {value}; expecting {type(opts.data_labels[key].default).__name__}"
 
         for key, value, comp in zip(opts.data_labels.keys(), args, components):
             comp_args = opts.data_labels[key].component_args
@@ -829,33 +845,47 @@ def create_ui(txt2img, img2img, run_extras, run_pnginfo):
             oldval = opts.data.get(key, None)
             opts.data[key] = value
 
-            if oldval != value and opts.data_labels[key].onchange is not None:
-                opts.data_labels[key].onchange()
+            if oldval != value:
+                if opts.data_labels[key].onchange is not None:
+                    opts.data_labels[key].onchange()
 
-            up.append(comp.update(value=value))
+                changed += 1
 
         opts.save(shared.config_filename)
 
-        return 'Settings applied.'
+        return f'{changed} settings changed.'
 
     with gr.Blocks(analytics_enabled=False) as settings_interface:
         settings_submit = gr.Button(value="Apply settings", variant='primary')
         result = gr.HTML()
 
+        settings_cols = 3
+        items_per_col = int(len(opts.data_labels) * 0.9 / settings_cols)
+
+        cols_displayed = 0
+        items_displayed = 0
+        previous_section = None
+        column = None
         with gr.Row(elem_id="settings").style(equal_height=False):
-            for colno in range(settings_cols):
-                with gr.Column(variant='panel'):
-                    for rowno in range(items_per_col):
-                        index = rowno + colno * items_per_col
+            for i, (k, item) in enumerate(opts.data_labels.items()):
 
-                        if index < len(keys):
-                            components.append(create_setting_component(keys[index]))
+                if previous_section != item.section:
+                    if cols_displayed < settings_cols and (items_displayed >= items_per_col or previous_section is None):
+                        if column is not None:
+                            column.__exit__()
 
-        settings_submit.click(
-            fn=run_settings,
-            inputs=components,
-            outputs=[result]
-        )
+                        column = gr.Column(variant='panel')
+                        column.__enter__()
+
+                        items_displayed = 0
+                        cols_displayed += 1
+
+                    previous_section = item.section
+
+                    gr.HTML(elem_id="settings_header_text_{}".format(item.section[0]), value='<h1 class="gr-button-lg">{}</h1>'.format(item.section[1]))
+
+                components.append(create_setting_component(k))
+                items_displayed += 1
 
         request_notifications = gr.Button(value='Request browser notifications', elem_id="request_notifications")
         request_notifications.click(
@@ -863,6 +893,15 @@ def create_ui(txt2img, img2img, run_extras, run_pnginfo):
             inputs=[],
             outputs=[],
             _js='function(){}'
+        )
+
+        if column is not None:
+            column.__exit__()
+
+        settings_submit.click(
+            fn=run_settings,
+            inputs=components,
+            outputs=[result]
         )
 
     interfaces = [
@@ -1001,7 +1040,7 @@ with open(os.path.join(script_path, "script.js"), "r", encoding="utf8") as jsfil
     javascript = f'<script>{jsfile.read()}</script>'
 
 jsdir = os.path.join(script_path, "javascript")
-for filename in os.listdir(jsdir):
+for filename in sorted(os.listdir(jsdir)):
     with open(os.path.join(jsdir, filename), "r", encoding="utf8") as jsfile:
         javascript += f"\n<script>{jsfile.read()}</script>"
 

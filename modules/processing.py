@@ -20,6 +20,7 @@ import modules.shared as shared
 import modules.face_restoration
 import modules.images as images
 import modules.styles
+import logging
 
 
 # some of those options should not be changed at all because they would break the model, so I removed them from options.
@@ -28,11 +29,13 @@ opt_f = 8
 
 
 def setup_color_correction(image):
+    logging.info("Calibrating color correction.")
     correction_target = cv2.cvtColor(np.asarray(image.copy()), cv2.COLOR_RGB2LAB)
     return correction_target
 
 
 def apply_color_correction(correction, image):
+    logging.info("Applying color correction.")
     image = Image.fromarray(cv2.cvtColor(exposure.match_histograms(
         cv2.cvtColor(
             np.asarray(image),
@@ -357,7 +360,7 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
 
                 if p.restore_faces:
                     if opts.save and not p.do_not_save_samples and opts.save_images_before_face_restoration:
-                        images.save_image(Image.fromarray(x_sample), p.outpath_samples, "", seeds[i], prompts[i], opts.samples_format, info=infotext(n, i), p=p)
+                        images.save_image(Image.fromarray(x_sample), p.outpath_samples, "", seeds[i], prompts[i], opts.samples_format, info=infotext(n, i), p=p, suffix="-before-face-restoration")
 
                     devices.torch_gc()
 
@@ -366,6 +369,8 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
                 image = Image.fromarray(x_sample)
 
                 if p.color_corrections is not None and i < len(p.color_corrections):
+                    if opts.save and not p.do_not_save_samples and opts.save_images_before_color_correction:
+                        images.save_image(image, p.outpath_samples, "", seeds[i], prompts[i], opts.samples_format, info=infotext(n, i), p=p, suffix="-before-color-correction")
                     image = apply_color_correction(p.color_corrections[i], image)
 
                 if p.overlay_images is not None and i < len(p.overlay_images):
@@ -457,7 +462,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
         else:
             decoded_samples = self.sd_model.decode_first_stage(samples)
 
-            if opts.upscaler_for_hires_fix is None or opts.upscaler_for_hires_fix == "None":
+            if opts.upscaler_for_img2img is None or opts.upscaler_for_img2img == "None":
                 decoded_samples = torch.nn.functional.interpolate(decoded_samples, size=(self.height, self.width), mode="bilinear")
             else:
                 lowres_samples = torch.clamp((decoded_samples + 1.0) / 2.0, min=0.0, max=1.0)
@@ -467,7 +472,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
                     x_sample = 255. * np.moveaxis(x_sample.cpu().numpy(), 0, 2)
                     x_sample = x_sample.astype(np.uint8)
                     image = Image.fromarray(x_sample)
-                    upscaler = [x for x in shared.sd_upscalers if x.name == opts.upscaler_for_hires_fix][0]
+                    upscaler = [x for x in shared.sd_upscalers if x.name == opts.upscaler_for_img2img][0]
                     image = upscaler.upscale(image, self.width, self.height)
                     image = np.array(image).astype(np.float32) / 255.0
                     image = np.moveaxis(image, 2, 0)
