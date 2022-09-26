@@ -210,7 +210,7 @@ def draw_prompt_matrix(im, width, height, all_prompts):
 
 def resize_image(resize_mode, im, width, height):
     def resize(im, w, h):
-        if opts.upscaler_for_img2img is None or opts.upscaler_for_img2img == "None":
+        if opts.upscaler_for_img2img is None or opts.upscaler_for_img2img == "None" or im.mode == 'L':
             return im.resize((w, h), resample=LANCZOS)
 
         upscaler = [x for x in shared.sd_upscalers if x.name == opts.upscaler_for_img2img][0]
@@ -290,10 +290,12 @@ def apply_filename_pattern(x, p, seed, prompt):
         x = x.replace("[cfg]", str(p.cfg_scale))
         x = x.replace("[width]", str(p.width))
         x = x.replace("[height]", str(p.height))
+        x = x.replace("[styles]", sanitize_filename_part(", ".join(p.styles), replace_spaces=False))
         x = x.replace("[sampler]", sanitize_filename_part(sd_samplers.samplers[p.sampler_index].name, replace_spaces=False))
 
     x = x.replace("[model_hash]", shared.sd_model.sd_model_hash)
     x = x.replace("[date]", datetime.date.today().isoformat())
+    x = x.replace("[job_timestamp]", shared.state.job_timestamp)
 
     if cmd_opts.hide_ui_dir_config:
         x = re.sub(r'^[\\/]+|\.{2,}[\\/]+|[\\/]+\.{2,}', '', x)

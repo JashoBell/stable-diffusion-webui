@@ -4,6 +4,7 @@ import json
 import os
 import gradio as gr
 import tqdm
+import datetime
 
 import modules.artists
 from modules.paths import script_path, sd_path
@@ -65,6 +66,7 @@ class State:
     job = ""
     job_no = 0
     job_count = 0
+    job_timestamp = 0
     sampling_step = 0
     sampling_steps = 0
     current_latent = None
@@ -78,6 +80,8 @@ class State:
         self.job_no += 1
         self.sampling_step = 0
         self.current_image_sampling_step = 0
+    def get_job_timestamp(self):
+        return datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
 
 state = State()
@@ -116,7 +120,7 @@ def options_section(section_identifer, options_dict):
     return options_dict
 
 
-hide_dirs = {"visible": False} if cmd_opts.hide_ui_dir_config else None
+hide_dirs = {"visible": not cmd_opts.hide_ui_dir_config}
 
 options_templates = {}
 
@@ -306,6 +310,13 @@ class TotalTQDM:
         if self._tqdm is None:
             self.reset()
         self._tqdm.update()
+
+    def updateTotal(self, new_total):
+        if not opts.multiple_tqdm:
+            return
+        if self._tqdm is None:
+            self.reset()
+        self._tqdm.total=new_total
 
     def clear(self):
         if self._tqdm is not None:
