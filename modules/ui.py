@@ -961,6 +961,8 @@ def create_ui(wrap_gradio_gpu_call):
         with gr.Row().style(equal_height=False):
             with gr.Column():
                 with gr.Group():
+                    gr.HTML(value="<p style='margin-bottom: 0.7em'>See <b><a href=\"https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Textual-Inversion\">wiki</a></b> for detailed explanation.</p>")
+
                     gr.HTML(value="<p style='margin-bottom: 0.7em'>Create a new embedding</p>")
 
                     new_embedding_name = gr.Textbox(label="Name")
@@ -975,6 +977,24 @@ def create_ui(wrap_gradio_gpu_call):
                             create_embedding = gr.Button(value="Create", variant='primary')
 
                 with gr.Group():
+                    gr.HTML(value="<p style='margin-bottom: 0.7em'>Preprocess images</p>")
+
+                    process_src = gr.Textbox(label='Source directory')
+                    process_dst = gr.Textbox(label='Destination directory')
+
+                    with gr.Row():
+                        process_flip = gr.Checkbox(label='Flip')
+                        process_split = gr.Checkbox(label='Split into two')
+                        process_caption = gr.Checkbox(label='Add caption')
+
+                    with gr.Row():
+                        with gr.Column(scale=3):
+                            gr.HTML(value="")
+
+                        with gr.Column():
+                            run_preprocess = gr.Button(value="Preprocess", variant='primary')
+
+                with gr.Group():
                     gr.HTML(value="<p style='margin-bottom: 0.7em'>Train an embedding; must specify a directory with a set of 512x512 images</p>")
                     train_embedding_name = gr.Dropdown(label='Embedding', choices=sorted(sd_hijack.model_hijack.embedding_db.word_embeddings.keys()))
                     learn_rate = gr.Number(label='Learning rate', value=5.0e-03)
@@ -982,8 +1002,8 @@ def create_ui(wrap_gradio_gpu_call):
                     log_directory = gr.Textbox(label='Log directory', placeholder="Path to directory where to write outputs", value="textual_inversion")
                     template_file = gr.Textbox(label='Prompt template file', value=os.path.join(script_path, "textual_inversion_templates", "style_filewords.txt"))
                     steps = gr.Number(label='Max steps', value=100000, precision=0)
-                    create_image_every = gr.Number(label='Save an image to log directory every N steps, 0 to disable', value=1000, precision=0)
-                    save_embedding_every = gr.Number(label='Save a copy of embedding to log directory every N steps, 0 to disable', value=1000, precision=0)
+                    create_image_every = gr.Number(label='Save an image to log directory every N steps, 0 to disable', value=500, precision=0)
+                    save_embedding_every = gr.Number(label='Save a copy of embedding to log directory every N steps, 0 to disable', value=500, precision=0)
 
                     with gr.Row():
                         with gr.Column(scale=2):
@@ -1016,6 +1036,22 @@ def create_ui(wrap_gradio_gpu_call):
                 ti_output,
                 ti_outcome,
             ]
+        )
+
+        run_preprocess.click(
+            fn=wrap_gradio_gpu_call(modules.textual_inversion.ui.preprocess, extra_outputs=[gr.update()]),
+            _js="start_training_textual_inversion",
+            inputs=[
+                process_src,
+                process_dst,
+                process_flip,
+                process_split,
+                process_caption,
+            ],
+            outputs=[
+                ti_output,
+                ti_outcome,
+            ],
         )
 
         train_embedding.click(

@@ -7,6 +7,7 @@ import tqdm
 import html
 import datetime
 
+
 from modules import shared, devices, sd_hijack, processing, sd_models
 import modules.textual_inversion.dataset
 
@@ -211,7 +212,10 @@ def train_embedding(embedding_name, learn_rate, data_root, log_directory, steps,
 
         with torch.autocast("cuda"):
             c = cond_model([text])
+
+            x = x.to(devices.device)
             loss = shared.sd_model(x.unsqueeze(0), c)[0]
+            del x
 
             losses[embedding.step % losses.shape[0]] = loss.item()
 
