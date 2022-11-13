@@ -1230,6 +1230,7 @@ def create_ui(wrap_gradio_gpu_call):
                     with gr.Row():
                         process_flip = gr.Checkbox(label='Create flipped copies')
                         process_split = gr.Checkbox(label='Split oversized images')
+                        process_ratio = gr.Checkbox(label='Pad to 1:1 with white background')
                         process_focal_crop = gr.Checkbox(label='Auto focal point crop')
                         process_caption = gr.Checkbox(label='Use BLIP for caption')
                         process_caption_deepbooru = gr.Checkbox(label='Use deepbooru for caption', visible=True if cmd_opts.deepdanbooru else False)
@@ -1360,6 +1361,7 @@ def create_ui(wrap_gradio_gpu_call):
                 process_focal_crop_entropy_weight,
                 process_focal_crop_edges_weight,
                 process_focal_crop_debug,
+                process_ratio
             ],
             outputs=[
                 ti_output,

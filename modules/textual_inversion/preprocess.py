@@ -14,7 +14,7 @@ if cmd_opts.deepdanbooru:
     import modules.deepbooru as deepbooru
 
 
-def preprocess(process_src, process_dst, process_width, process_height, preprocess_txt_action, process_flip, process_split, process_caption, process_caption_deepbooru=False, split_threshold=0.5, overlap_ratio=0.2, process_focal_crop=False, process_focal_crop_face_weight=0.9, process_focal_crop_entropy_weight=0.3, process_focal_crop_edges_weight=0.5, process_focal_crop_debug=False):
+def preprocess(process_src, process_dst, process_width, process_height, preprocess_txt_action, process_flip, process_split, process_caption, process_caption_deepbooru=False, split_threshold=0.5, overlap_ratio=0.2, process_focal_crop=False, process_focal_crop_face_weight=0.9, process_focal_crop_entropy_weight=0.3, process_focal_crop_edges_weight=0.5, process_focal_crop_debug=False, make_one_to_one=False):
     try:
         if process_caption:
             shared.interrogator.load()
@@ -24,7 +24,7 @@ def preprocess(process_src, process_dst, process_width, process_height, preproce
             db_opts[deepbooru.OPT_INCLUDE_RANKS] = False
             deepbooru.create_deepbooru_process(opts.interrogate_deepbooru_score_threshold, db_opts)
 
-        preprocess_work(process_src, process_dst, process_width, process_height, preprocess_txt_action, process_flip, process_split, process_caption, process_caption_deepbooru, split_threshold, overlap_ratio, process_focal_crop, process_focal_crop_face_weight, process_focal_crop_entropy_weight, process_focal_crop_edges_weight, process_focal_crop_debug)
+        preprocess_work(process_src, process_dst, process_width, process_height, preprocess_txt_action, process_flip, process_split, process_caption, process_caption_deepbooru, split_threshold, overlap_ratio, process_focal_crop, process_focal_crop_face_weight, process_focal_crop_entropy_weight, process_focal_crop_edges_weight, process_focal_crop_debug, make_one_to_one)
 
     finally:
 
@@ -47,6 +47,7 @@ class PreprocessParams:
     process_caption = False
     process_caption_deepbooru = False
     preprocess_txt_action = None
+    make_one_to_one = False
 
 
 def save_pic_with_caption(image, index, params: PreprocessParams, existing_caption=None):
@@ -113,8 +114,14 @@ def split_pic(image, inverse_xy, width, height, overlap_ratio):
             splitted = image.crop((0, y, to_w, y + to_h))
         yield splitted
 
+def make_img_one_to_one(image, min_size=512, fill_color=(255, 255, 255, 0)):
+    x, y = image.size
+    size = max(min_size, x, y)
+    new_im = Image.new('RGB', (size, size), fill_color)
+    new_im.paste(image, (int((size - x) / 2), int((size - y) / 2)))
+    return new_im
 
-def preprocess_work(process_src, process_dst, process_width, process_height, preprocess_txt_action, process_flip, process_split, process_caption, process_caption_deepbooru=False, split_threshold=0.5, overlap_ratio=0.2, process_focal_crop=False, process_focal_crop_face_weight=0.9, process_focal_crop_entropy_weight=0.3, process_focal_crop_edges_weight=0.5, process_focal_crop_debug=False):
+def preprocess_work(process_src, process_dst, process_width, process_height, preprocess_txt_action, process_flip, process_split, process_caption, process_caption_deepbooru=False, split_threshold=0.5, overlap_ratio=0.2, process_focal_crop=False, process_focal_crop_face_weight=0.9, process_focal_crop_entropy_weight=0.3, process_focal_crop_edges_weight=0.5, process_focal_crop_debug=False, make_one_to_one=False):
     width = process_width
     height = process_height
     src = os.path.abspath(process_src)
@@ -137,6 +144,7 @@ def preprocess_work(process_src, process_dst, process_width, process_height, pre
     params.process_caption = process_caption
     params.process_caption_deepbooru = process_caption_deepbooru
     params.preprocess_txt_action = preprocess_txt_action
+    params.make_one_to_one = make_one_to_one
 
     for index, imagefile in enumerate(tqdm.tqdm(files)):
         params.subindex = 0
@@ -191,7 +199,11 @@ def preprocess_work(process_src, process_dst, process_width, process_height, pre
             for focal in autocrop.crop_image(img, autocrop_settings):
                 save_pic(focal, index, params, existing_caption=existing_caption)
             process_default_resize = False
-
+        
+        if make_one_to_one:
+            save_pic(make_img_one_to_one(img), index, params, existing_caption=existing_caption)
+            process_default_resize = False
+        
         if process_default_resize:
             img = images.resize_image(1, img, width, height)
             save_pic(img, index, params, existing_caption=existing_caption)
