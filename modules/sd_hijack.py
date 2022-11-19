@@ -96,8 +96,8 @@ class StableDiffusionModelHijack:
         if type(model_embeddings.token_embedding) == EmbeddingsWithFixes:
             model_embeddings.token_embedding = model_embeddings.token_embedding.wrapped
 
+        self.apply_circular(False)
         self.layers = None
-        self.circular_enabled = False
         self.clip = None
 
     def apply_circular(self, enable):
@@ -418,8 +418,7 @@ def register_buffer(self, name, attr):
     if type(attr) == torch.Tensor:
         if attr.device != devices.device:
 
-            # would this not break cuda when torch adds has_mps() to main version?
-            if getattr(torch, 'has_mps', False):
+            if devices.has_mps():
                 attr = attr.to(device="mps", dtype=torch.float32)
             else:
                 attr = attr.to(devices.device)
