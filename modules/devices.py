@@ -1,18 +1,42 @@
+import sys, os, shlex
+import contextlib
 import torch
-
-# has_mps is only available in nightly pytorch (for now), `getattr` for compatibility
 from modules import errors
 
-has_mps = getattr(torch, 'has_mps', False)
 
-cpu = torch.device("cpu")
+# has_mps is only available in nightly pytorch (for now) and MasOS 12.3+.
+# check `getattr` and try it for compatibility
+def has_mps() -> bool:
+    if not getattr(torch, 'has_mps', False):
+        return False
+    try:
+        torch.zeros(1).to(torch.device("mps"))
+        return True
+    except Exception:
+        return False
+
+
+def extract_device_id(args, name):
+    for x in range(len(args)):
+        if name in args[x]:
+            return args[x + 1]
+
+    return None
 
 
 def get_optimal_device():
     if torch.cuda.is_available():
-        return torch.device("cuda")
+        from modules import shared
 
-    if has_mps:
+        device_id = shared.cmd_opts.device_id
+
+        if device_id is not None:
+            cuda_device = f"cuda:{device_id}"
+            return torch.device(cuda_device)
+        else:
+            return torch.device("cuda")
+
+    if has_mps():
         return torch.device("mps")
 
     return cpu
@@ -32,9 +56,10 @@ def enable_tf32():
 
 errors.run(enable_tf32, "Enabling TF32")
 
-
-device = get_optimal_device()
-device_codeformer = cpu if has_mps else device
+cpu = torch.device("cpu")
+device = device_interrogate = device_gfpgan = device_swinir = device_esrgan = device_scunet = device_codeformer = None
+dtype = torch.float16
+dtype_vae = torch.float16
 
 
 def randn(seed, shape):
@@ -48,3 +73,33 @@ def randn(seed, shape):
     torch.manual_seed(seed)
     return torch.randn(shape, device=device)
 
+
+def randn_without_seed(shape):
+    # Pytorch currently doesn't handle setting randomness correctly when the metal backend is used.
+    if device.type == 'mps':
+        generator = torch.Generator(device=cpu)
+        noise = torch.randn(shape, generator=generator, device=cpu).to(device)
+        return noise
+
+    return torch.randn(shape, device=device)
+
+
+def autocast(disable=False):
+    from modules import shared
+
+    if disable:
+        return contextlib.nullcontext()
+
+    if dtype == torch.float32 or shared.cmd_opts.precision == "full":
+        return contextlib.nullcontext()
+
+    return torch.autocast("cuda")
+
+
+# MPS workaround for https://github.com/pytorch/pytorch/issues/79383
+def mps_contiguous(input_tensor, device):
+    return input_tensor.contiguous() if device.type == 'mps' else input_tensor
+
+
+def mps_contiguous_to(input_tensor, device):
+    return mps_contiguous(input_tensor, device).to(device)

@@ -4,11 +4,8 @@ import gradio as gr
 from modules.processing import Processed
 from modules.shared import opts, cmd_opts, state
 
-# An example custom script that allows you to make modifications to how the model object is handled. 
-# These scripts appear in the lower-left dropdown menu on the txt2img and img2img tabs.
 class Script(scripts.Script):
 
-    # The title of the script. This is what will be displayed in the dropdown menu.
     def title(self):
         return "Custom code"
 
@@ -24,16 +21,11 @@ class Script(scripts.Script):
     # for the different elements you can use and how to specify them. The returned parameters 
     # are passed to the run method.
     def ui(self, is_img2img):
-        code = gr.Textbox(label="Python code", visible=False, lines=1)
+        code = gr.Textbox(label="Python code", lines=1)
 
         return [code]
 
 
-    # This is where the additional processing is implemented. The parameters include self, the model object 
-    # (a StableDiffusionProcessing class, see processing.py), and the parameters returned by 
-    # the ui method. Custom functions can be defined here, and additional libraries can be 
-    # imported to be used in processing. The return value is a Processed object, which is what
-    # is returned by the process_images method.
     def run(self, p, code):
         assert cmd_opts.allow_code, '--allow-code option must be enabled'
 
@@ -53,4 +45,5 @@ class Script(scripts.Script):
         exec(compiled, module.__dict__)
 
         return Processed(p, *display_result_data)
-
+    
+    
