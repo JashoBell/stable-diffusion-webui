@@ -64,12 +64,12 @@ class InterrogateModels:
         return blip_model
 
     def load_clip_model(self):
-        import clip
+        import open_clip as clip
 
         if self.running_on_cpu:
-            model, preprocess = clip.load(clip_model_name, device="cpu", download_root=shared.cmd_opts.clip_models_path)
+            model, preprocess = clip.create_model_from_pretrained(clip_model_name, pretrained_model_name, device="cpu")
         else:
-            model, preprocess = clip.load(clip_model_name, download_root=shared.cmd_opts.clip_models_path)
+            model, preprocess = clip.create_model_from_pretrained(clip_model_name, pretrained_model_name)
 
         model.eval()
         model = model.to(devices.device_interrogate)
