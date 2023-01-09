@@ -9,10 +9,6 @@ class Script(scripts.Script):
     def title(self):
         return "Custom code"
 
-
-    # Determines when the script should be shown in the dropdown menu via the returned value. 
-    # is_img2img is True if the current tab is img2img, and False if it is txt2img. Thus, return 
-    # is_img2img to only show the script on the img2img tab.
     def show(self, is_img2img):
         return cmd_opts.allow_code
 
@@ -21,7 +17,7 @@ class Script(scripts.Script):
     # for the different elements you can use and how to specify them. The returned parameters 
     # are passed to the run method.
     def ui(self, is_img2img):
-        code = gr.Textbox(label="Python code", lines=1)
+        code = gr.Textbox(label="Python code", lines=1, elem_id=self.elem_id("code"))
 
         return [code]
 
