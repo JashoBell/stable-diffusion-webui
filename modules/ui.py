@@ -631,9 +631,9 @@ def create_ui():
                 (hr_resize_y, "Hires resize-2"),
                 *modules.scripts.scripts_txt2img.infotext_fields
             ]
-            parameters_copypaste.add_paste_fields("txt2img", None, txt2img_paste_fields)
+            parameters_copypaste.add_paste_fields("txt2img", None, txt2img_paste_fields, override_settings)
             parameters_copypaste.register_paste_params_button(parameters_copypaste.ParamBinding(
-                paste_button=txt2img_paste, tabname="txt2img", source_text_component=txt2img_prompt, source_image_component=None, override_settings_component=override_settings,
+                paste_button=txt2img_paste, tabname="txt2img", source_text_component=txt2img_prompt, source_image_component=None,
             ))
 
             txt2img_preview_params = [
@@ -939,7 +939,7 @@ def create_ui():
                 )
 
             token_button.click(fn=update_token_counter, inputs=[img2img_prompt, steps], outputs=[token_counter])
-            negative_token_button.click(fn=wrap_queued_call(update_token_counter), inputs=[txt2img_negative_prompt, steps], outputs=[negative_token_counter])
+            negative_token_button.click(fn=wrap_queued_call(update_token_counter), inputs=[img2img_negative_prompt, steps], outputs=[negative_token_counter])
 
             ui_extra_networks.setup_ui(extra_networks_ui_img2img, img2img_gallery)
 
@@ -963,10 +963,10 @@ def create_ui():
                 (mask_blur, "Mask blur"),
                 *modules.scripts.scripts_img2img.infotext_fields
             ]
-            parameters_copypaste.add_paste_fields("img2img", init_img, img2img_paste_fields)
-            parameters_copypaste.add_paste_fields("inpaint", init_img_with_mask, img2img_paste_fields)
+            parameters_copypaste.add_paste_fields("img2img", init_img, img2img_paste_fields, override_settings)
+            parameters_copypaste.add_paste_fields("inpaint", init_img_with_mask, img2img_paste_fields, override_settings)
             parameters_copypaste.register_paste_params_button(parameters_copypaste.ParamBinding(
-                paste_button=img2img_paste, tabname="img2img", source_text_component=img2img_prompt, source_image_component=None, override_settings_component=override_settings,
+                paste_button=img2img_paste, tabname="img2img", source_text_component=img2img_prompt, source_image_component=None,
             ))
 
     modules.scripts.scripts_current = None
@@ -1191,6 +1191,8 @@ def create_ui():
                         create_image_every = gr.Number(label='Save an image to log directory every N steps, 0 to disable', value=500, precision=0, elem_id="train_create_image_every")
                         save_embedding_every = gr.Number(label='Save a copy of embedding to log directory every N steps, 0 to disable', value=500, precision=0, elem_id="train_save_embedding_every")
 
+                    use_weight = gr.Checkbox(label="Use PNG alpha channel as loss weight", value=False, elem_id="use_weight")
+
                     save_image_with_stored_embedding = gr.Checkbox(label='Save images with embedding in PNG chunks', value=True, elem_id="train_save_image_with_stored_embedding")
                     preview_from_txt2img = gr.Checkbox(label='Read parameters (prompt, etc...) from txt2img tab when making previews', value=False, elem_id="train_preview_from_txt2img")
 
@@ -1304,6 +1306,7 @@ def create_ui():
                 shuffle_tags,
                 tag_drop_out,
                 latent_sampling_method,
+                use_weight,
                 create_image_every,
                 save_embedding_every,
                 template_file,
@@ -1337,6 +1340,7 @@ def create_ui():
                 shuffle_tags,
                 tag_drop_out,
                 latent_sampling_method,
+                use_weight,
                 create_image_every,
                 save_embedding_every,
                 template_file,
@@ -1559,6 +1563,10 @@ def create_ui():
     extensions_interface = ui_extensions.create_ui()
     interfaces += [(extensions_interface, "Extensions", "extensions")]
 
+    shared.tab_names = []
+    for _interface, label, _ifid in interfaces:
+        shared.tab_names.append(label)
+
     with gr.Blocks(css=css, analytics_enabled=False, title="Stable Diffusion") as demo:
         with gr.Row(elem_id="quicksettings", variant="compact"):
             for i, k, item in sorted(quicksettings_list, key=lambda x: quicksettings_names.get(x[1], x[0])):
@@ -1569,6 +1577,8 @@ def create_ui():
 
         with gr.Tabs(elem_id="tabs") as tabs:
             for interface, label, ifid in interfaces:
+                if label in shared.opts.hidden_tabs:
+                    continue
                 with gr.TabItem(label, id=ifid, elem_id='tab_' + ifid):
                     interface.render()
 
@@ -1750,6 +1760,9 @@ def reload_javascript():
     for script in modules.scripts.list_scripts("javascript", ".js"):
         head += f'<script type="text/javascript" src="file={script.path}?{os.path.getmtime(script.path)}"></script>\n'
 
+    for script in modules.scripts.list_scripts("javascript", ".mjs"):
+        head += f'<script type="module" src="file={script.path}?{os.path.getmtime(script.path)}"></script>\n'
+
     head += f'<script type="text/javascript">{inline}</script>\n'
 
     def template_response(*args, **kwargs):
@@ -1782,7 +1795,7 @@ def versions_html():
     return f"""
 python: <span title="{sys.version}">{python_version}</span>
  • 
-torch: {torch.__version__}
+torch: {getattr(torch, '__long_version__',torch.__version__)}
  • 
 xformers: {xformers_version}
  • 

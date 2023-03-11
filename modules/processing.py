@@ -543,8 +543,6 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
     if os.path.exists(cmd_opts.embeddings_dir) and not p.do_not_reload_embeddings:
         model_hijack.embedding_db.load_textual_inversion_embeddings()
 
-    _, extra_network_data = extra_networks.parse_prompts(p.all_prompts[0:1])
-
     if p.scripts is not None:
         p.scripts.process(p)
 
@@ -582,13 +580,6 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
             if shared.opts.live_previews_enable and opts.show_progress_type == "Approx NN":
                 sd_vae_approx.model()
 
-            if not p.disable_extra_networks:
-                extra_networks.activate(p, extra_network_data)
-
-        with open(os.path.join(paths.data_path, "params.txt"), "w", encoding="utf8") as file:
-            processed = Processed(p, [], p.seed, "")
-            file.write(processed.infotext(p, 0))
-
         if state.job_count == -1:
             state.job_count = p.n_iter
 
@@ -606,13 +597,29 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
             seeds = p.all_seeds[n * p.batch_size:(n + 1) * p.batch_size]
             subseeds = p.all_subseeds[n * p.batch_size:(n + 1) * p.batch_size]
 
+            if p.scripts is not None:
+                p.scripts.before_process_batch(p, batch_number=n, prompts=prompts, seeds=seeds, subseeds=subseeds)
+
             if len(prompts) == 0:
                 break
 
-            prompts, _ = extra_networks.parse_prompts(prompts)
+            prompts, extra_network_data = extra_networks.parse_prompts(prompts)
+
+            if not p.disable_extra_networks:
+                with devices.autocast():
+                    extra_networks.activate(p, extra_network_data)
 
             if p.scripts is not None:
                 p.scripts.process_batch(p, batch_number=n, prompts=prompts, seeds=seeds, subseeds=subseeds)
+
+            # params.txt should be saved after scripts.process_batch, since the
+            # infotext could be modified by that callback
+            # Example: a wildcard processed by process_batch sets an extra model
+            # strength, which is saved as "Model Strength: 1.0" in the infotext
+            if n == 0:
+                with open(os.path.join(paths.data_path, "params.txt"), "w", encoding="utf8") as file:
+                    processed = Processed(p, [], p.seed, "")
+                    file.write(processed.infotext(p, 0))
 
             uc = get_conds_with_caching(prompt_parser.get_learned_conditioning, negative_prompts, p.steps, cached_uc)
             c = get_conds_with_caching(prompt_parser.get_multicond_learned_conditioning, prompts, p.steps, cached_c)
@@ -884,7 +891,9 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
         shared.state.nextjob()
 
-        img2img_sampler_name = self.sampler_name if self.sampler_name != 'PLMS' else 'DDIM'  # PLMS does not support img2img so we just silently switch ot DDIM
+        img2img_sampler_name = self.sampler_name
+        if self.sampler_name in ['PLMS', 'UniPC']:  # PLMS/UniPC do not support img2img so we just silently switch to DDIM
+            img2img_sampler_name = 'DDIM'
         self.sampler = sd_samplers.create_sampler(img2img_sampler_name, self.sd_model)
 
         samples = samples[:, :, self.truncate_y//2:samples.shape[2]-(self.truncate_y+1)//2, self.truncate_x//2:samples.shape[3]-(self.truncate_x+1)//2]
